@@ -4,7 +4,7 @@ set -euo pipefail
 # Claude Code Hybrid Model System Installer
 # Usage: curl -fsSL https://raw.githubusercontent.com/binee108/claude-code-hybrid/main/install.sh | bash
 
-VERSION="1.3.0"
+VERSION="1.4.0"
 
 BOLD="\033[1m"
 GREEN="\033[32m"
@@ -26,11 +26,9 @@ VERSION_TAG="# CLAUDE_HYBRID_VERSION="
 
 # ─── Parse arguments ───
 ARG_FORCE=""
-ARG_BACKUP=""
 for arg in "$@"; do
     case "$arg" in
         --force) ARG_FORCE=1 ;;
-        --backup) ARG_BACKUP=1 ;;
     esac
 done
 
@@ -56,12 +54,10 @@ echo -e "Leader: Anthropic (Opus) | Teammates: Any model"
 echo "=================================================="
 echo ""
 
-# ─── Backup if requested ───
-if [[ -n "$ARG_BACKUP" ]]; then
-    info "Creating backup..."
-    _do_backup
-    echo ""
-fi
+# ─── Auto-backup before any modification ───
+info "Creating backup..."
+_do_backup
+echo ""
 
 # ─── Version check ───
 # Detect shell config file
@@ -103,8 +99,6 @@ if [[ -n "$INSTALLED_VERSION" ]]; then
         warn "Force reinstall requested"
     elif _version_gt "$VERSION" "$INSTALLED_VERSION"; then
         info "Updating v${INSTALLED_VERSION} -> v${VERSION}"
-        info "Auto-backup before update..."
-        _do_backup
     else
         warn "Installed version (v${INSTALLED_VERSION}) is newer than installer (v${VERSION})"
         echo ""
