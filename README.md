@@ -282,9 +282,10 @@ ct --model codex
 | `cc` | Claude Code solo (Anthropic direct) |
 | `cc --model <name>` | Claude Code solo with profile model |
 | `ct` | Teams mode (all Anthropic) |
-| `ct --model <name>` | Teams hybrid (leader Anthropic, teammates profile model) |
-| `ccw` | `cc` with `--worktree` |
-| `ctw` | `ct` with `--worktree` |
+| `ct --model <name>` | Teams (leader: Anthropic, teammates: profile model) |
+| `ct --leader <name>` | Teams (leader: profile model, teammates: Anthropic) |
+| `ct --teammate <name>` | Same as `--model` |
+| `ct -l <name> -t <name>` | Teams (leader and teammates each use different models) |
 
 Profiles are stored at `~/.claude-models/*.env`.
 

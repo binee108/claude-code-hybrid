@@ -4,7 +4,7 @@ set -euo pipefail
 # Claude Code Hybrid Model System Installer
 # Usage: curl -fsSL https://raw.githubusercontent.com/binee108/claude-code-hybrid/main/install.sh | bash
 
-VERSION="1.4.0"
+VERSION="1.5.0"
 
 BOLD="\033[1m"
 GREEN="\033[32m"
@@ -393,31 +393,40 @@ function cc() {
 
 # --- ct: Claude Code Teams (hybrid) ---
 ct() {
-    local MODEL=""
-    local WORKTREE=""
+    local LEADER=""
+    local TEAMMATE=""
     while [[ \$# -gt 0 ]]; do
         case "\$1" in
-            --model|-m) MODEL="\$2"; shift 2 ;;
-            --worktree|-w) WORKTREE="--worktree"; shift ;;
+            --leader|-l) LEADER="\$2"; shift 2 ;;
+            --teammate|-t) TEAMMATE="\$2"; shift 2 ;;
+            --model|-m) TEAMMATE="\$2"; shift 2 ;;
             *) break ;;
         esac
     done
 
+    # Validate model profiles
+    if [[ -n "\$LEADER" && ! -f "\$HOME/.claude-models/\${LEADER}.env" ]]; then
+        echo "Error: Unknown leader model '\$LEADER'. Available:"
+        ls ~/.claude-models/*.env 2>/dev/null | xargs -I{} basename {} .env | sed 's/^/  /'
+        return 1
+    fi
+    if [[ -n "\$TEAMMATE" && ! -f "\$HOME/.claude-models/\${TEAMMATE}.env" ]]; then
+        echo "Error: Unknown teammate model '\$TEAMMATE'. Available:"
+        ls ~/.claude-models/*.env 2>/dev/null | xargs -I{} basename {} .env | sed 's/^/  /'
+        return 1
+    fi
+
     local PROJECT_DIR="\$(pwd)"
     local PROJECT_NAME="\$(basename "\$PROJECT_DIR")"
-    local SESSION="claude-teams"
 
-    if [[ -n "\$MODEL" ]]; then
-        local PROFILE="\$HOME/.claude-models/\${MODEL}.env"
-        if [[ ! -f "\$PROFILE" ]]; then
-            echo "Error: Unknown model '\$MODEL'. Available:"
-            ls ~/.claude-models/*.env 2>/dev/null | xargs -I{} basename {} .env | sed 's/^/  /'
-            return 1
-        fi
-        echo "\$MODEL" > ~/.claude-hybrid-active
-        SESSION="claude-teams-\${MODEL}"
-    else
-        rm -f ~/.claude-hybrid-active
+    # Session naming
+    local SESSION="claude-teams"
+    if [[ -n "\$LEADER" && -n "\$TEAMMATE" ]]; then
+        SESSION="claude-teams-\${LEADER}-\${TEAMMATE}"
+    elif [[ -n "\$TEAMMATE" ]]; then
+        SESSION="claude-teams-\${TEAMMATE}"
+    elif [[ -n "\$LEADER" ]]; then
+        SESSION="claude-teams-\${LEADER}"
     fi
 
     # Increment session name if already exists
@@ -429,13 +438,22 @@ ct() {
         SESSION="\${SESSION}-\${i}"
     fi
 
+    # Clear global hybrid marker (prevent stale hook interference)
+    rm -f ~/.claude-hybrid-active
+
     tmux new-session -d -s "\$SESSION" -n "\$PROJECT_NAME" -c "\$PROJECT_DIR"
 
-    if [[ -n "\$MODEL" ]]; then
-        tmux send-keys -t "\$SESSION" \\
-            "unset HYBRID_ACTIVE ANTHROPIC_AUTH_TOKEN ANTHROPIC_BASE_URL ANTHROPIC_DEFAULT_HAIKU_MODEL ANTHROPIC_DEFAULT_SONNET_MODEL ANTHROPIC_DEFAULT_OPUS_MODEL; \\
-            export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1; \\
-            claude --dangerously-skip-permissions \$WORKTREE --teammate-mode tmux" Enter
+    # Set teammate model in tmux session environment (inherited by teammate panes)
+    if [[ -n "\$TEAMMATE" ]]; then
+        (
+            source "\$HOME/.claude-models/\${TEAMMATE}.env"
+            tmux set-environment -t "\$SESSION" HYBRID_ACTIVE "\$TEAMMATE"
+            tmux set-environment -t "\$SESSION" ANTHROPIC_AUTH_TOKEN "\$MODEL_AUTH_TOKEN"
+            tmux set-environment -t "\$SESSION" ANTHROPIC_BASE_URL "\$MODEL_BASE_URL"
+            tmux set-environment -t "\$SESSION" ANTHROPIC_DEFAULT_HAIKU_MODEL "\$MODEL_HAIKU"
+            tmux set-environment -t "\$SESSION" ANTHROPIC_DEFAULT_SONNET_MODEL "\$MODEL_SONNET"
+            tmux set-environment -t "\$SESSION" ANTHROPIC_DEFAULT_OPUS_MODEL "\$MODEL_OPUS"
+        )
     else
         tmux set-environment -t "\$SESSION" -u HYBRID_ACTIVE 2>/dev/null
         tmux set-environment -t "\$SESSION" -u ANTHROPIC_AUTH_TOKEN 2>/dev/null
@@ -443,19 +461,27 @@ ct() {
         tmux set-environment -t "\$SESSION" -u ANTHROPIC_DEFAULT_HAIKU_MODEL 2>/dev/null
         tmux set-environment -t "\$SESSION" -u ANTHROPIC_DEFAULT_SONNET_MODEL 2>/dev/null
         tmux set-environment -t "\$SESSION" -u ANTHROPIC_DEFAULT_OPUS_MODEL 2>/dev/null
-        tmux send-keys -t "\$SESSION" \\
-            "unset ANTHROPIC_AUTH_TOKEN ANTHROPIC_BASE_URL ANTHROPIC_DEFAULT_HAIKU_MODEL ANTHROPIC_DEFAULT_SONNET_MODEL ANTHROPIC_DEFAULT_OPUS_MODEL; \\
-            export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1; \\
-            claude --dangerously-skip-permissions \$WORKTREE --teammate-mode tmux" Enter
     fi
+
+    # Launch leader pane
+    if [[ -n "\$LEADER" ]]; then
+        tmux send-keys -t "\$SESSION" \\
+            "_claude_load_model \$LEADER && \\
+            export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1 && \\
+            claude --dangerously-skip-permissions --teammate-mode tmux" Enter
+    else
+        tmux send-keys -t "\$SESSION" \\
+            "unset HYBRID_ACTIVE ANTHROPIC_AUTH_TOKEN ANTHROPIC_BASE_URL ANTHROPIC_DEFAULT_HAIKU_MODEL ANTHROPIC_DEFAULT_SONNET_MODEL ANTHROPIC_DEFAULT_OPUS_MODEL; \\
+            export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1; \\
+            claude --dangerously-skip-permissions --teammate-mode tmux" Enter
+    fi
+
     tmux attach -t "\$SESSION"
 }
 
 # --- Aliases ---
 alias cc-glm='cc --model glm'
-alias ccw='cc --worktree'
 alias ct-glm='ct --model glm'
-alias ctw='ct --worktree'
 $MARKER_END
 SHELLEOF
 
@@ -472,12 +498,12 @@ echo ""
 echo "  Restart your shell or run:  source $SHELL_RC"
 echo ""
 echo -e "${BOLD}Usage:${RESET}"
-echo "  cc                    # Claude Code (Anthropic direct)"
-echo "  cc --model glm        # Claude Code with GLM"
-echo "  ct                    # Teams (all Anthropic)"
-echo "  ct --model glm        # Teams hybrid (leader: Opus, teammates: GLM)"
-echo "  ct --model codex      # Teams hybrid (leader: Opus, teammates: Codex)"
-echo "  ccw / ctw             # Same as above with --worktree"
+echo "  cc                          # Claude Code (Anthropic direct)"
+echo "  cc --model glm              # Claude Code with GLM"
+echo "  ct                          # Teams (all Anthropic)"
+echo "  ct --model glm              # Teams (leader: Anthropic, teammates: GLM)"
+echo "  ct -l codex -t glm          # Teams (leader: Codex, teammates: GLM)"
+echo "  ct --leader kimi            # Teams (leader: Kimi, teammates: Anthropic)"
 echo ""
 echo -e "${BOLD}Configure your API keys:${RESET}"
 echo "  vim ~/.claude-models/glm.env      # Set GLM API key"
@@ -486,5 +512,5 @@ echo ""
 echo -e "${BOLD}Add a new model:${RESET}"
 echo "  Create ~/.claude-models/<name>.env with:"
 echo "    MODEL_AUTH_TOKEN, MODEL_BASE_URL, MODEL_HAIKU, MODEL_SONNET, MODEL_OPUS"
-echo "  Then use: ct --model <name>"
+echo "  Then use: ct --leader <name> or ct --teammate <name>"
 echo ""
