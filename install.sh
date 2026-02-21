@@ -240,6 +240,8 @@ for p in \
     /opt/homebrew/bin/cli-proxy-api \
     /usr/bin/cliproxyapi \
     /usr/bin/cli-proxy-api \
+    /snap/bin/cliproxyapi \
+    /snap/bin/cli-proxy-api \
     "$HOME/.local/bin/cliproxyapi" \
     "$HOME/.local/bin/cli-proxy-api" \
     "$HOME/bin/cliproxyapi" \
@@ -568,6 +570,8 @@ cdoctor() {
         /opt/homebrew/bin/cli-proxy-api \
         /usr/bin/cliproxyapi \
         /usr/bin/cli-proxy-api \
+        /snap/bin/cliproxyapi \
+        /snap/bin/cli-proxy-api \
         "\$HOME/.local/bin/cliproxyapi" \
         "\$HOME/.local/bin/cli-proxy-api" \
         "\$HOME/bin/cliproxyapi" \
@@ -583,7 +587,7 @@ cdoctor() {
     if [[ -n "\$cliproxy_bin" ]]; then
         _doctor_ok "CLIProxyAPI binary found: \${cliproxy_bin}"
 
-        if command -v brew >/dev/null 2>&1; then
+        if [[ "$(uname -s)" == "Darwin" ]] && command -v brew >/dev/null 2>&1; then
             if brew services list 2>/dev/null | grep -Eq '^cliproxyapi[[:space:]]+started'; then
                 _doctor_ok "CLIProxyAPI service started (brew services)"
             else

@@ -185,14 +185,23 @@ Create systemd user service:
 ```bash
 mkdir -p ~/.config/systemd/user
 
-cat > ~/.config/systemd/user/cliproxyapi.service <<'EOF'
+if command -v cliproxyapi >/dev/null 2>&1; then
+  CLIPROXY_BIN="$(command -v cliproxyapi)"
+elif command -v cli-proxy-api >/dev/null 2>&1; then
+  CLIPROXY_BIN="$(command -v cli-proxy-api)"
+else
+  echo "ERROR: CLIProxyAPI command not found in PATH" >&2
+  exit 1
+fi
+
+cat > ~/.config/systemd/user/cliproxyapi.service <<EOF
 [Unit]
 Description=CLIProxyAPI Service
 After=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/cliproxyapi
+ExecStart=${CLIPROXY_BIN}
 Restart=on-failure
 RestartSec=5
 
@@ -346,6 +355,18 @@ First, detect the config path (from Section 3):
 if [[ -z "$CLIPROXY_CONFIG_PATH" ]]; then
   echo "ERROR: CLIPROXY_CONFIG_PATH not set. Run platform detection first." >&2
   exit 1
+fi
+
+if [[ "$CLIPROXY_CONFIG_PATH" == /etc/* ]]; then
+  if [[ -f "$CLIPROXY_CONFIG_PATH" ]] && [[ ! -w "$CLIPROXY_CONFIG_PATH" ]]; then
+    echo "No write permission for existing $CLIPROXY_CONFIG_PATH, falling back to user config path..."
+    CLIPROXY_CONFIG_PATH="$HOME/.config/cliproxyapi/cliproxyapi.conf"
+    export CLIPROXY_CONFIG_PATH
+  elif [[ ! -f "$CLIPROXY_CONFIG_PATH" ]] && [[ ! -w "$(dirname "$CLIPROXY_CONFIG_PATH")" ]]; then
+    echo "No write permission for $CLIPROXY_CONFIG_PATH, falling back to user config path..."
+    CLIPROXY_CONFIG_PATH="$HOME/.config/cliproxyapi/cliproxyapi.conf"
+    export CLIPROXY_CONFIG_PATH
+  fi
 fi
 
 if [[ ! -f "$CLIPROXY_CONFIG_PATH" ]]; then
